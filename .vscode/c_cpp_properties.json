@@ -1,0 +1,34 @@
+{
+  "configurations": [
+    {
+      "name": "windows-clang-x64",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.28000.0/km",
+        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.28000.0/km/crt",
+        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.28000.0/shared",
+        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.28000.0/um",
+        "C:/Program Files (x86)/Windows Kits/10/Include/wdf/kmdf/**"
+      ],
+      "defines": [
+        "_AMD64_",
+        "AMD64",
+        "CONDITION_HANDLING=1",
+        "NT_UP=1",
+        "NT_INST=0",
+        "WIN32=100",
+        "_NT1X_=100",
+        "WINNT=1",
+        "_WIN32_WINNT=0x0A00",
+        "WINVER=0x0A00",
+        "_WIN32_IE=0x0800",
+        "WIN32_LEAN_AND_MEAN=1"
+      ],
+      "compilerPath": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe",
+      "cStandard": "c17",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "windows-clang-x64"
+    }
+  ],
+  "version": 4
+}
