@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+﻿from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QTextEdit, QLabel, QSplitter, 
                              QProgressBar, QTabWidget, QListWidget, QListWidgetItem,
                              QFrame, QComboBox, QLineEdit)
@@ -12,7 +12,6 @@ class KernelMapperUI(QMainWindow):
         self.setup_ui()
 
     def setup_ui(self):
-        # Dark theme stylesheet
         self.setStyleSheet("""
             QMainWindow { background-color: #1e1e1e; color: #ffffff; }
             QTabWidget::pane { border: 1px solid #3e3e42; }
@@ -27,8 +26,6 @@ class KernelMapperUI(QMainWindow):
             QProgressBar { border: 1px solid #3e3e42; text-align: center; color: white; }
             QProgressBar::chunk { background-color: #0e639c; }
             QLabel { color: #cccccc; font-weight: bold; }
-            #counterLabel { font-size: 16px; color: #4fc1ff; }
-            #statusLabel { font-size: 16px; color: #4fc1ff; margin-bottom: 10px;}
         """)
 
         central_widget = QWidget()
@@ -38,14 +35,10 @@ class KernelMapperUI(QMainWindow):
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs)
 
-        # ==========================================
-        # TAB 1: CLASS SCANNER
-        # ==========================================
         self.tab_classes = QWidget()
         self.tab_classes_layout = QVBoxLayout(self.tab_classes)
         self.tabs.addTab(self.tab_classes, "Class Scanner")
 
-        # Top Control Panel (Class Scanner)
         self.control_panel = QFrame()
         self.control_layout = QHBoxLayout(self.control_panel)
         
@@ -71,11 +64,9 @@ class KernelMapperUI(QMainWindow):
         self.progress_bar.setValue(0)
         self.tab_classes_layout.addWidget(self.progress_bar)
         
-        # Splitter for lists and preview
         self.splitter = QSplitter(Qt.Horizontal)
         self.tab_classes_layout.addWidget(self.splitter)
         
-        # Left side: Classes List
         self.left_panel = QWidget()
         self.left_layout = QVBoxLayout(self.left_panel)
         
@@ -87,7 +78,6 @@ class KernelMapperUI(QMainWindow):
         self.left_layout.addWidget(self.lbl_counter)
         self.left_layout.addWidget(self.class_list)
         
-        # Right side: Preview
         self.right_panel = QWidget()
         self.right_layout = QVBoxLayout(self.right_panel)
         
@@ -115,9 +105,6 @@ class KernelMapperUI(QMainWindow):
         self.splitter.addWidget(self.right_panel)
         self.splitter.setSizes([300, 500])
 
-        # ==========================================
-        # TAB 2: CHEAT ENGINE (VALUE SCANNER)
-        # ==========================================
         self.tab_ce = QWidget()
         self.tab_ce_layout = QVBoxLayout(self.tab_ce)
         self.tabs.addTab(self.tab_ce, "Cheat Engine (Value Scan)")
@@ -159,9 +146,6 @@ class KernelMapperUI(QMainWindow):
         self.btn_analyze_ptr.setEnabled(False)
         self.tab_ce_layout.addWidget(self.btn_analyze_ptr)
 
-        # ==========================================
-        # LIVE OBJECT DUMPER
-        # ==========================================
         live_dump_frame = QFrame()
         live_dump_frame.setStyleSheet("background-color: #2d2d30; border: 1px solid #3e3e42; border-radius: 5px; margin-top: 10px;")
         live_dump_layout = QVBoxLayout(live_dump_frame)
@@ -188,9 +172,6 @@ class KernelMapperUI(QMainWindow):
         
         self.tab_ce_layout.addWidget(live_dump_frame)
 
-        # ==========================================
-        # COMMON CONSOLE
-        # ==========================================
         self.console = QTextEdit()
         self.console.setReadOnly(True)
         self.console.setLineWrapMode(QTextEdit.NoWrap)

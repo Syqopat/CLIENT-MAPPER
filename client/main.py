@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import os
 import subprocess
 import urllib.request
@@ -17,29 +17,24 @@ class AppController(KernelMapperUI):
         self.found_classes = set()
         self.class_count = 0
         
-        # Connect UI buttons
         self.btn_stop.clicked.connect(self.stop_scan)
         self.btn_decompile.clicked.connect(self.decompile_selected_class)
         self.btn_dump_offsets.clicked.connect(self.dump_jvm_offsets_action)
         
-        # Live Dumper
         self.btn_live_dump.clicked.connect(self.toggle_live_dump)
         self.live_dump_timer = QTimer(self)
         self.live_dump_timer.timeout.connect(self.update_live_dump)
         self.live_offsets = []
         self.live_base_addr = 0
         
-        # Start looking for process
         self.log("[*] Scanner initialized. Waiting for sonoyuncuclient.exe...")
         self.search_timer = QTimer(self)
         self.search_timer.timeout.connect(self.auto_start_scan)
         self.search_timer.start(2000) # Check every 2 seconds
         
-        # Ensure Decompiler exists
         self.ensure_decompiler()
 
     def ensure_decompiler(self):
-        # Ensure CFR
         if not os.path.exists(self.cfr_path):
             self.log("[*] Downloading CFR Decompiler (cfr.jar)...")
             try:
@@ -49,7 +44,6 @@ class AppController(KernelMapperUI):
             except Exception as e:
                 self.log(f"[!] Failed to download CFR: {e}")
                 
-        # Ensure Procyon
         if not os.path.exists(self.procyon_path):
             self.log("[*] Downloading Procyon Decompiler (procyon.jar)...")
             try:
@@ -71,10 +65,6 @@ class AppController(KernelMapperUI):
         if self.scanner_thread and self.scanner_thread.isRunning():
             return
 
-        # SonOyuncu runs TWO processes with the same name:
-        #   - Launcher (~63MB) - just the UI wrapper
-        #   - Game (~2GB) - the actual JVM with Minecraft classes embedded
-        # We MUST pick the one with the most RAM!
         
         best_pid = None
         best_ram = 0
@@ -109,7 +99,6 @@ class AppController(KernelMapperUI):
         self.scanner_thread.log_signal.connect(self.log)
         self.scanner_thread.progress_signal.connect(self.progress_bar.setValue)
         
-        # Connect new class signal
         self.scanner_thread.class_found_signal.connect(self.on_class_found)
         
         self.scanner_thread.finished_signal.connect(self.on_scan_finished)
@@ -137,7 +126,6 @@ class AppController(KernelMapperUI):
         self.class_count += 1
         self.lbl_counter.setText(f"Dumped Classes: {self.class_count}")
         
-        # Auto-scroll occasionally to prevent UI blocking
         if self.class_count % 10 == 0:
             self.class_list.scrollToBottom()
 
@@ -162,9 +150,6 @@ class AppController(KernelMapperUI):
             self.class_preview.setText("[!] File not found on disk.")
             return
             
-        # Since our Multi-Vector attack directly extracts Java Skeletons as .java files,
-        # we do NOT need to run CFR or Procyon (which expect .class bytecode).
-        # We can just read the file directly!
         
         if filename.endswith(".java") or filename.endswith(".txt"):
             self.class_preview.setText(f"[*] Reading Extracted File: {filename}...\n")
@@ -180,25 +165,21 @@ class AppController(KernelMapperUI):
         QApplication.processEvents() # Force UI update
         
         try:
-            # TRY 1: CFR
             cmd_cfr = ['java', '-jar', self.cfr_path, filename]
             result_cfr = subprocess.run(cmd_cfr, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
             
             output = result_cfr.stdout
             
-            # Check if CFR failed or output is meaningless
             if result_cfr.returncode != 0 or "Decompilation failed" in output or len(output.strip()) < 50:
                 self.class_preview.setText(f"[*] CFR failed or returned poor results. Trying Procyon...\n")
                 QApplication.processEvents()
                 
-                # TRY 2: Procyon
                 cmd_proc = ['java', '-jar', self.procyon_path, filename]
                 result_proc = subprocess.run(cmd_proc, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
                 
                 if result_proc.returncode == 0 and len(result_proc.stdout.strip()) > 50:
                     self.class_preview.setText(f"/* Decompiled with Procyon */\n\n{result_proc.stdout}")
                 else:
-                    # Both failed
                     error_msg = f"[!] Both decompilers failed to produce meaningful output.\n\n"
                     error_msg += f"--- CFR ERROR ---\n{result_cfr.stderr}\n\n"
                     error_msg += f"--- PROCYON ERROR ---\n{result_proc.stderr}"
@@ -229,11 +210,9 @@ class AppController(KernelMapperUI):
         self.log(f"[*] Dispatching JVM Hack Offset Dumper for: {class_name}")
         self.btn_dump_offsets.setEnabled(False)
         
-        # We run this on the scanner thread to avoid freezing UI
         self.scanner_thread = MemoryScannerThread(self.target_pid)
         self.scanner_thread.log_signal.connect(self.log)
         
-        # Monkey patch run for this specific task
         def run_dumper():
             self.scanner_thread.dump_jvm_offsets(class_name)
             self.btn_dump_offsets.setEnabled(True)
@@ -246,7 +225,6 @@ class AppController(KernelMapperUI):
         self.scanner_thread = None
         self.log("[*] Scan finished or stopped. You can manually restart when needed.")
         self.lbl_selected.setText("Scan Finished.")
-        # Timer is NOT restarted here so it doesn't loop endlessly
 
     def toggle_live_dump(self):
         if self.live_dump_timer.isActive():
@@ -267,7 +245,6 @@ class AppController(KernelMapperUI):
             self.log("Invalid hex address!")
             return
             
-        # Get selected class
         selected = self.class_list.selectedItems()
         if not selected:
             self.log("Select a class from the list first to load its offsets!")
@@ -281,12 +258,10 @@ class AppController(KernelMapperUI):
             self.log(f"No _OFFSETS.txt found for {class_name}! Click 'Extract Field Offsets' first.")
             return
             
-        # Parse offsets from the text file
         self.live_offsets = []
         with open(dump_file, "r", encoding="utf-8") as f:
             for line in f:
                 if line.startswith("Offset: "):
-                    # Offset: 0x46 | Field: d2)K     [Type: F]
                     parts = line.split("|")
                     off_str = parts[0].replace("Offset:", "").strip()
                     off_val = int(off_str, 16)
@@ -323,7 +298,6 @@ class AppController(KernelMapperUI):
             
         result_lines = [f"--- LIVE DATA FOR 0x{self.live_base_addr:X} ---"]
         
-        # Read a chunk of memory (e.g. 2048 bytes) from base address
         buf = ctypes.create_string_buffer(2048)
         bytes_read = ctypes.c_size_t()
         

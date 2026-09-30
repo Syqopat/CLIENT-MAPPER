@@ -1,0 +1,6 @@
+{
+  "decompiler_default": "cfr",
+  "output_dir": "decompiled_output",
+  "log_level": "INFO",
+  "timeout_seconds": 300
+}

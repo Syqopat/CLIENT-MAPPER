@@ -1,4 +1,4 @@
-"""
+﻿"""
 Antigravity Memory Scanner - x64dbg Style ReadProcessMemory Engine
 No Frida, No JNI, No JVMTI. Pure Windows API memory reading.
 Inspired by x64dbg and Cheat Engine internals.
@@ -10,9 +10,6 @@ import re
 import struct
 from PyQt5.QtCore import QThread, pyqtSignal
 
-# ============================================================
-# Windows API Constants & Structures (same ones x64dbg uses)
-# ============================================================
 PROCESS_VM_READ = 0x0010
 PROCESS_QUERY_INFORMATION = 0x0400
 MEM_COMMIT = 0x1000
@@ -32,9 +29,6 @@ class MEMORY_BASIC_INFORMATION(ctypes.Structure):
         ("Type", wt.DWORD),
     ]
 
-# ============================================================
-# Core Windows API Functions (ReadProcessMemory, VirtualQueryEx)
-# ============================================================
 OpenProcess = kernel32.OpenProcess
 OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
 OpenProcess.restype = wt.HANDLE
@@ -51,13 +45,7 @@ CloseHandle = kernel32.CloseHandle
 CloseHandle.argtypes = [wt.HANDLE]
 CloseHandle.restype = wt.BOOL
 
-# ============================================================
-# Search Signatures - Generic patterns that exist in ANY Minecraft
-# Even if classes are obfuscated, these strings survive because
-# they are hardcoded in the game engine or JVM itself
-# ============================================================
 
-# Phase 1: Exact class names (works if not obfuscated)
 EXACT_CLASSES = [
     "net/minecraft/client/Minecraft",
     "net/minecraft/client/main/Main",
@@ -65,7 +53,6 @@ EXACT_CLASSES = [
     "net/minecraft/world/World",
 ]
 
-# Phase 2: Short generic strings guaranteed in any Minecraft JVM
 GENERIC_SIGNATURES = [
     b"Minecraft",                  # Window title, always present
     b"minecraft",                  # Lowercase references
@@ -117,9 +104,6 @@ class MemoryScannerThread(QThread):
     def stop(self):
         self.is_running = False
 
-    # ============================================================
-    # Low-level memory reading (exactly what x64dbg does internally)
-    # ============================================================
     def read_memory(self, address, size):
         """Read raw bytes from target process memory using ReadProcessMemory."""
         buf = ctypes.create_string_buffer(size)
@@ -144,7 +128,6 @@ class MemoryScannerThread(QThread):
             base = mbi.BaseAddress or 0
             size = mbi.RegionSize or 0
 
-            # Only scan committed, readable pages (skip guard/noaccess)
             if (mbi.State == MEM_COMMIT and
                 mbi.Protect not in (PAGE_NOACCESS, PAGE_GUARD, 0) and
                 not (mbi.Protect & PAGE_GUARD) and
@@ -167,7 +150,6 @@ class MemoryScannerThread(QThread):
             if not self.is_running:
                 break
 
-            # Read in chunks to avoid massive allocations
             chunk_size = min(size, 4 * 1024 * 1024)  # 4MB chunks
             offset = 0
 
@@ -184,7 +166,6 @@ class MemoryScannerThread(QThread):
                         pos = idx_found + 1
                 offset += chunk_size
 
-            # Update progress
             if total > 0:
                 pct = int((idx + 1) / total * 100)
                 self.progress_signal.emit(pct)
@@ -223,10 +204,7 @@ class MemoryScannerThread(QThread):
         if not header or len(header) < 8:
             return None
 
-        # The Symbol header varies by JVM version. Try common layouts:
-        # Layout 1: [hash:4][length:2][refcount:2] (Java 8+)
         length_at_4 = struct.unpack_from('<H', header, 4)[0]
-        # Layout 2: [length:4][hash:4] (some builds)
         length_at_0 = struct.unpack_from('<H', header, 0)[0]
 
         return string_addr - 8  # Return the Symbol base address
@@ -280,36 +258,28 @@ class MemoryScannerThread(QThread):
         other_classes = []
 
         for s in nearby_strings:
-            # Skip the class name itself and very short strings
             if s == class_name or len(s) < 2:
                 continue
 
-            # Type descriptors (JVM format)
             if s.startswith("(") or s.startswith("[") or s in ("Z", "B", "C", "S", "I", "J", "F", "D", "V"):
                 descriptors.append(s)
-            # Other class references
             elif "/" in s and not s.startswith("("):
                 other_classes.append(s)
-            # Likely method names (camelCase, short, no spaces)
             elif s[0].islower() and " " not in s and len(s) < 50 and s.isidentifier():
                 methods.append(s)
-            # Likely field names
             elif s.isidentifier() and len(s) < 40:
                 fields.append(s)
 
-        # Remove duplicates while preserving order
         fields = list(dict.fromkeys(fields))
         methods = list(dict.fromkeys(methods))
         other_classes = list(dict.fromkeys(other_classes))
 
-        # Build skeleton
         lines = []
         lines.append(f"// Extracted by Antigravity Memory Scanner (ReadProcessMemory)")
         lines.append(f"// Source: Raw RAM dump of sonoyuncuclient.exe")
         lines.append(f"// Class Address found in process memory")
         lines.append(f"")
 
-        # Imports from discovered class references
         for ref in other_classes[:20]:
             lines.append(f"import {ref.replace('/', '.')};")
         if other_classes:
@@ -318,21 +288,18 @@ class MemoryScannerThread(QThread):
         lines.append(f"public class {short_name} {{")
         lines.append(f"")
 
-        # Fields
         if fields:
             lines.append(f"    // ===== Fields ({len(fields)}) =====")
             for f in fields:
                 lines.append(f"    public Object {f};")
             lines.append("")
 
-        # Methods
         if methods:
             lines.append(f"    // ===== Methods ({len(methods)}) =====")
             for m in methods:
                 lines.append(f"    public void {m}() {{ /* extracted */ }}")
             lines.append("")
 
-        # Type descriptors as comments
         if descriptors:
             lines.append(f"    // ===== Type Descriptors ({len(descriptors)}) =====")
             for d in descriptors[:30]:
@@ -342,14 +309,10 @@ class MemoryScannerThread(QThread):
         lines.append("}")
         return "\n".join(lines)
 
-    # ============================================================
-    # Cheat Engine / Value Scanning Logic
-    # ============================================================
     def scan_value_first(self, value, val_type):
         """First scan: search entire memory for a specific value"""
         self.log_signal.emit(f"[*] Starting FIRST SCAN for {value} ({val_type})")
         
-        # Pack the target value based on type
         try:
             if val_type == "Float (4 bytes)":
                 target_bytes = struct.pack("f", float(value))
@@ -374,7 +337,6 @@ class MemoryScannerThread(QThread):
         """Next scan: check existing addresses for a new value"""
         self.log_signal.emit(f"[*] Starting NEXT SCAN for {new_value} ({val_type}) on {len(current_addresses)} addresses")
         
-        # Pack the new target value
         try:
             if val_type == "Float (4 bytes)":
                 target_bytes = struct.pack("f", float(new_value))
@@ -391,13 +353,11 @@ class MemoryScannerThread(QThread):
         new_results = []
         val_len = len(target_bytes)
         
-        # We need a process handle to read memory
         handle = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, False, self.pid)
         if not handle:
             self.log_signal.emit("[!] Failed to open process for Next Scan.")
             return current_addresses
 
-        # Check each address
         buf = ctypes.create_string_buffer(val_len)
         bytes_read = ctypes.c_size_t()
         
@@ -410,9 +370,6 @@ class MemoryScannerThread(QThread):
         self.log_signal.emit(f"[+] Next scan filtered down to {len(new_results)} matches.")
         return new_results
 
-    # ============================================================
-    # JVM Internal Parsing (Heuristic Offset Dumper)
-    # ============================================================
     def dump_jvm_offsets(self, target_class_name):
         """
         Attempts to dump field offsets by locating the InstanceKlass pointer
@@ -425,7 +382,6 @@ class MemoryScannerThread(QThread):
             self.log_signal.emit("[!] Failed to open process for JVM parsing.")
             return []
 
-        # 1. Find the Symbol string in memory
         target_bytes = target_class_name.encode('utf-8')
         regions = self.enumerate_memory_regions()
         string_addrs = self.scan_for_string(target_bytes, regions)
@@ -438,22 +394,17 @@ class MemoryScannerThread(QThread):
         self.log_signal.emit(f"[+] Found '{target_class_name}' at {len(string_addrs)} locations.")
         handle = self.process_handle
 
-        # 2. Find Pointers to the Symbol
-        # A Symbol object in JVM 8 has an 8-byte header (length, refcount, identity_hash).
-        # So the actual pointer to the Symbol is usually string_addr - 8.
         pointer_candidates = []
         for addr in string_addrs:
             pointer_candidates.append(addr - 8)
             pointer_candidates.append(addr - 6) # Sometimes length is u2 at offset 0
             pointer_candidates.append(addr)
             
-        # Compile pointer byte patterns (Little Endian 64-bit)
         pointer_patterns = [struct.pack("<Q", p) for p in pointer_candidates]
         
         self.log_signal.emit(f"[*] Scanning RAM for InstanceKlass pointers (8 bytes)...")
         instance_klass_addrs = []
         
-        # We only scan regions that look like Metaspace or Heap (Read/Write)
         for base, size in regions:
             if not self.is_running:
                 break
@@ -467,13 +418,9 @@ class MemoryScannerThread(QThread):
                     instance_klass_addrs.append(ik_addr)
                     idx = data.find(pattern, idx + 1)
                     
-        # Remove duplicates
         instance_klass_addrs = list(set(instance_klass_addrs))
         self.log_signal.emit(f"[+] Found {len(instance_klass_addrs)} possible InstanceKlass pointers.")
         
-        # 3. Heuristic Extraction around InstanceKlass
-        # We read a 4KB chunk around the found pointer and look for standard Java field descriptors
-        # and their packed offsets.
         results = []
         raw_hex_dumps = []
         for ik_addr in instance_klass_addrs:
@@ -489,17 +436,14 @@ class MemoryScannerThread(QThread):
                 if b"Lnet/minecraft/" in chunk or b"Ljava/lang/String;" in chunk:
                     self.log_signal.emit(f"[*] Valid Metaspace chunk found around 0x{ik_addr:X}")
                     
-                    # Store raw hex for the file
                     raw_hex_dumps.append(f"--- HEX DUMP FOR INSTANCEKLASS AT 0x{ik_addr:X} ---\n" + self.dump_hex(ik_addr - 128, 512))
                     
-                    # Match printable strings (names and signatures)
                     strings = list(re.finditer(b'[A-Za-z0-9_/<>;$()]{1,50}', chunk))
                     for i, match in enumerate(strings):
                         s_val = match.group().decode('utf-8', errors='ignore')
                         if s_val.startswith("(") or len(s_val) < 2 or s_val in ('Code', 'LineNumberTable', 'SourceFile'):
                             continue 
                             
-                        # Try to find a type signature nearby (often the next string in CP)
                         sig_val = ""
                         if i + 1 < len(strings):
                             next_val = strings[i+1].group().decode('utf-8', errors='ignore')
@@ -515,7 +459,6 @@ class MemoryScannerThread(QThread):
                                     if 0x08 <= p_off <= 0x300: # Typical object offset range
                                         type_str = f" [Type: {sig_val}]" if sig_val else ""
                                         
-                                        # Heuristic Hinting for the user
                                         hint = ""
                                         if sig_val == "F": hint = " <- (Could be Health, Pitch, Yaw)"
                                         elif sig_val == "D": hint = " <- (Could be PosX, PosY, PosZ)"
@@ -539,7 +482,6 @@ class MemoryScannerThread(QThread):
             
             if results:
                 f.write("--- AUTOMATICALLY PARSED OFFSETS ---\n")
-                # Sort by offset
                 try:
                     results.sort(key=lambda x: int(x.split("0x")[1].split()[0], 16))
                 except:
@@ -562,14 +504,10 @@ class MemoryScannerThread(QThread):
             
         return results
 
-    # ============================================================
-    # Main scan logic (Class Scanner)
-    # ============================================================
     def run(self):
         self.log_signal.emit(f"[*] Antigravity Memory Scanner starting for PID: {self.pid}")
         self.log_signal.emit(f"[*] Engine: ReadProcessMemory (x64dbg/CE style, no injection)")
 
-        # Open process with read access
         self.process_handle = OpenProcess(
             PROCESS_VM_READ | PROCESS_QUERY_INFORMATION,
             False,
@@ -584,7 +522,6 @@ class MemoryScannerThread(QThread):
 
         self.log_signal.emit(f"[+] Process handle acquired: 0x{self.process_handle:X}")
 
-        # Step 1: Enumerate memory regions (like x64dbg's Memory Map)
         self.log_signal.emit("[STAGE 1] Building Memory Map (VirtualQueryEx)...")
         regions = self.enumerate_memory_regions()
         total_mb = sum(size for _, size in regions) / (1024 * 1024)
@@ -600,9 +537,6 @@ class MemoryScannerThread(QThread):
             self.finished_signal.emit()
             return
 
-        # ====================================================
-        # PHASE 1: Try exact Minecraft class names
-        # ====================================================
         self.log_signal.emit(f"\n{'='*60}")
         self.log_signal.emit(f"[PHASE 1] Searching for exact Minecraft class names...")
         self.log_signal.emit(f"{'='*60}")
@@ -650,9 +584,6 @@ class MemoryScannerThread(QThread):
             )
             dumped_count += 1
 
-        # ====================================================
-        # PHASE 2: Generic signature scan (works even if obfuscated)
-        # ====================================================
         self.log_signal.emit(f"\n{'='*60}")
         self.log_signal.emit(f"[PHASE 2] Scanning for {len(GENERIC_SIGNATURES)} generic signatures...")
         self.log_signal.emit(f"{'='*60}")
@@ -669,7 +600,6 @@ class MemoryScannerThread(QThread):
 
             if count > 0:
                 self.log_signal.emit(f"    [+] '{sig_name}' -> {count} hit(s)")
-                # For important signatures, save nearby strings
                 if count <= 20 and sig_name in ('thePlayer', 'theWorld', 'SonOyuncu', 'AntiCheat', 'GameSettings', 'ticksExisted', 'onGround'):
                     for addr in addresses[:3]:
                         nearby = self.extract_nearby_strings(addr - 1024, 4096)
@@ -696,15 +626,10 @@ class MemoryScannerThread(QThread):
             pct = int((sig_idx + 1) / len(GENERIC_SIGNATURES) * 50) + 50
             self.progress_signal.emit(min(pct, 99))
 
-        # ====================================================
-        # PHASE 3: Broad Java string discovery
-        # ====================================================
         self.log_signal.emit(f"\n{'='*60}")
         self.log_signal.emit(f"[PHASE 3] Broad Java string discovery...")
         self.log_signal.emit(f"{'='*60}")
 
-        # Search for JVM class path patterns: anything with / separators like a/b/c
-        # This catches obfuscated classes like "abc/def/Ghi"
         java_markers = [b"java/lang/", b"sun/misc/", b"com/sun/", b"org/apache/", b"net/minecraft/", b"cpw/mods/", b"com/mojang/"]
         
         all_java_strings = set()
@@ -715,7 +640,6 @@ class MemoryScannerThread(QThread):
             addresses = self.scan_for_string(marker, regions)
             if addresses:
                 self.log_signal.emit(f"    [+] '{marker_name}' -> {len(addresses)} hits")
-                # Extract class names from around these markers
                 for addr in addresses[:50]:
                     nearby = self.extract_nearby_strings(addr - 128, 512)
                     for s in nearby:
@@ -725,7 +649,6 @@ class MemoryScannerThread(QThread):
         if all_java_strings:
             self.log_signal.emit(f"\n[+] Discovered {len(all_java_strings)} unique Java-like strings!")
             
-            # Save full discovery dump
             discovery_file = os.path.join(self.dump_dir, "_FULL_STRING_DISCOVERY.txt")
             sorted_strings = sorted(all_java_strings)
             with open(discovery_file, "w", encoding="utf-8") as f:
@@ -735,7 +658,6 @@ class MemoryScannerThread(QThread):
                 for s in sorted_strings:
                     f.write(s + "\n")
             
-            # Show some highlights
             mc_strings = [s for s in sorted_strings if 'minecraft' in s.lower() or 'mojang' in s.lower()]
             if mc_strings:
                 self.log_signal.emit(f"\n[!] MINECRAFT-RELATED STRINGS FOUND ({len(mc_strings)}):")
@@ -750,7 +672,6 @@ class MemoryScannerThread(QThread):
         else:
             self.log_signal.emit(f"    [!] No Java-like strings found. Is this the right process?")
 
-        # Cleanup
         CloseHandle(self.process_handle)
         self.process_handle = None
         self.progress_signal.emit(100)
